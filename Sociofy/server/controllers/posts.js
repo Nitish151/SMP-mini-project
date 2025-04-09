@@ -1,5 +1,10 @@
 import Post from "../models/Post.js";
 import User from "../models/User.js";
+import { updateScore } from "./scores.js";
+
+import { Types } from 'mongoose';
+const { ObjectId } = Types;
+
 
 /* CREATE */
 export const createPost = async (req, res) => {
@@ -87,22 +92,42 @@ export const likePost = async (req, res) => {
 
 export const patchComment = async (req, res) => {
   try {
-    const { id } = req.params; //post id
-    const { userId, text, name, picturePath } = req.body;
-    const post = await Post.findById(id);
-    const newComment = { userId, text, name, picturePath };
-    post.comments.push(newComment);
+    const { id } = req.params; // Post ID
+    const { userId, text } = req.body; // Assuming userId and text are provided in the request body
+
+    // Generate a unique comment ID for this specific comment
+    const commentId = new ObjectId();
 
     const updatedPost = await Post.findByIdAndUpdate(
       id,
-      { comments: post.comments },
-      { new: true }
+      {
+        $push: {
+          comments: { _id: commentId, userId, text, flags: [] } // Use the generated comment ID
+        }
+      },
+      { new: true } // Return the updated post after the update operation
+    );
+
+    if (!updatedPost) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    // Update user's comments array using $push without saving the user explicitly
+    await User.updateOne(
+      { _id: userId },
+      {
+        $push: {
+          comments: { _id: commentId, postId: id, userId, text, flags: [] } // Use the same generated comment ID
+        }
+      }
     );
 
     res.status(200).json(updatedPost);
   } catch (err) {
-    res.status(404).json({ message: err.message });
+    res.status(500).json({ message: err.message });
   }
+
+
 }
 
 //getComments
@@ -114,4 +139,5 @@ export const getComments = async (req, res) => {
   } catch (err) {
     res.status(404).json({ message: err.message });
   }
+
 };
